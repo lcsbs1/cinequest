@@ -55,14 +55,14 @@ router.post('/register', async (req, res) => {
 
     const { nome, email, telefone, data_nascimento, senha } = req.body;
 
-    if (findUserByEmail(email)) {
+    if (await findUserByEmail(email)) {
       return res.status(409).json({ error: 'Este e-mail já está cadastrado.' });
     }
 
     const senha_hash = await bcrypt.hash(senha, 10);
     const now = Date.now();
     const perfilData = buildDefaultPerfil(email.toLowerCase().trim(), now);
-    const user = createUser({ nome, email, telefone, data_nascimento, senha_hash, perfil_data: perfilData });
+    const user = await createUser({ nome, email, telefone, data_nascimento, senha_hash, perfil_data: perfilData });
     const token = signToken(user.id);
 
     res.status(201).json({
@@ -84,7 +84,7 @@ router.post('/login', async (req, res) => {
       return res.status(400).json({ error: 'E-mail e senha são obrigatórios.' });
     }
 
-    const user = findUserByEmail(email);
+    const user = await findUserByEmail(email);
     if (!user) {
       return res.status(401).json({ error: 'E-mail ou senha incorretos.' });
     }
@@ -107,8 +107,8 @@ router.post('/login', async (req, res) => {
   }
 });
 
-router.get('/me', authMiddleware, (req, res) => {
-  const user = findUserById(req.userId);
+router.get('/me', authMiddleware, async (req, res) => {
+  const user = await findUserById(req.userId);
   if (!user) return res.status(404).json({ error: 'Usuário não encontrado.' });
   res.json({ user: toPublicUser(user) });
 });

@@ -145,7 +145,7 @@ function extractParts(content) {
 const ERA_NORM = { 'clássico': 'classic', 'classico': 'classic', '80s-90s': '80s90s', 'recente': 'recent' };
 const COMPANY_NORM = { 'sozinho': 'solo', 'família': 'family', 'familia': 'family', 'amigos': 'friends' };
 
-function applyRecommendationToProfile(userId, memory, perfil, args) {
+async function applyRecommendationToProfile(userId, memory, perfil, args) {
   try {
     const sessionState = {
       mood: (args.humor || '').toLowerCase(),
@@ -174,7 +174,7 @@ function applyRecommendationToProfile(userId, memory, perfil, args) {
       perfil = checkAndUnlockConquistas(perfil, memory);
     }
     if (perfil && Object.keys(perfil).length) {
-      updatePerfil(userId, perfil);
+      await updatePerfil(userId, perfil);
     }
   } catch (e) {
     console.warn('Falha ao acoplar perfil:', e.message);
@@ -195,11 +195,11 @@ router.post('/chat', authMiddleware, async (req, res) => {
     return res.status(400).json({ error: 'Prompt obrigatório.' });
   }
 
-  const user = findUserById(req.userId);
+  const user = await findUserById(req.userId);
   if (!user) return res.status(404).json({ error: 'Usuário não encontrado.' });
 
   const memory = loadFullMemory(user);
-  let perfil = getPerfil(req.userId) || {};
+  let perfil = (await getPerfil(req.userId)) || {};
 
   const systemText = `${SYSTEM_BASE}\n\n--- PERFIL DA PESSOA ---\n${perfilContext(user, perfil)}`;
   const userPrompt = bootstrap
@@ -218,7 +218,7 @@ router.post('/chat', authMiddleware, async (req, res) => {
       movies = await discoverMovies(args);
 
       // Acopla perfil/memória a partir das pistas reunidas
-      perfil = applyRecommendationToProfile(req.userId, memory, perfil, args);
+      perfil = await applyRecommendationToProfile(req.userId, memory, perfil, args);
 
       // Segundo turno: devolve os filmes ao modelo p/ comentar
       contents = [
@@ -254,7 +254,7 @@ router.post('/chat', authMiddleware, async (req, res) => {
     memory.geminiData.lastResponse = text;
     memory.geminiData.usage = { queries: (memory.geminiData.usage?.queries || 0) + 1 };
 
-    updateUserMemory(req.userId, memory);
+    await updateUserMemory(req.userId, memory);
 
     return res.json({
       response: text,
