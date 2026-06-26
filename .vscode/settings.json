@@ -1,1 +1,15 @@
-{}
+{
+    "sqltools.connections": [
+        {
+            "ssh": "Disabled",
+            "previewLimit": 50,
+            "server": "localhost",
+            "port": 5432,
+            "askForPassword": true,
+            "driver": "PostgreSQL",
+            "name": "cinequest",
+            "database": "cinequest_db",
+            "username": "cinequest"
+        }
+    ]
+}
