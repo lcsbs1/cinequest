@@ -1,0 +1,13 @@
+npx skills add https://skills.sh/obra/superpowers/brainstorming
+
+npx skills add https://github.com/anthropics/skills --skill frontend-design
+
+npx skills add https://github.com/coreyhaines31/marketingskills --skill copywriting
+
+npx skills add https://github.com/skillssh/skills --skill landing-page-design
+
+npx skills add https://github.com/coreyhaines31/marketingskills --skill ai-seo
+
+npx skills add https://github.com/agricidaniel/claude-ads --skill ads
+
+npx skills add https://github.com/poteto/noodle --skill adversarial-review
