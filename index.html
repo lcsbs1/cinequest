@@ -14,6 +14,7 @@
   <div class="bg-grid"></div>
   <div class="bg-glow bg-glow-1"></div>
   <div class="bg-glow bg-glow-2"></div>
+  <div class="bg-glow bg-glow-3"></div>
   <canvas id="particles"></canvas>
 
   <main class="app-wrapper">
@@ -38,6 +39,7 @@
     <!-- Painel de autenticação / conta -->
     <section class="auth-panel" id="authPanel" style="display:none;">
       <div class="auth-panel-inner">
+        <button class="auth-close-btn" id="authCloseBtn" aria-label="Fechar painel">✕</button>
         <div class="auth-header">
           <div class="auth-header-icon">🎬</div>
           <h2 class="auth-title">Sua conta Teaser</h2>
@@ -222,6 +224,7 @@
           maxlength="280"
           autocomplete="off"
         />
+        <span class="input-char-count" id="inputCharCount"></span>
         <button class="send-btn" id="sendBtn" title="Enviar">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <line x1="22" y1="2" x2="11" y2="13"></line>

@@ -241,8 +241,19 @@ function renderEmptyState() {
   node.className = 'chat-empty';
   node.innerHTML = `
     <div class="chat-empty-glyph">✦</div>
-    <div class="chat-empty-title">Vamos achar seu próximo filme</div>
-    <div class="chat-empty-sub">Conte como você está hoje, com quem vai assistir ou o que está a fim de sentir. O curador cuida do resto.</div>`;
+    <div class="chat-empty-title">O que você quer<br>descobrir hoje?</div>
+    <div class="chat-empty-sub">Conte o que está sentindo, com quem vai assistir, ou deixe o curador te surpreender.</div>
+    <div class="empty-chips">
+      <button class="empty-chip" data-prompt="Quero algo que me surpreenda — algo que nunca teria escolhido sozinho">Algo inesperado</button>
+      <button class="empty-chip" data-prompt="Quero relaxar assistindo algo leve e agradável">Para relaxar</button>
+      <button class="empty-chip" data-prompt="Me recomende um clássico que não posso deixar de ver">Clássico imperdível</button>
+    </div>`;
+  node.querySelectorAll('.empty-chip').forEach(chip => {
+    chip.addEventListener('click', () => {
+      chatInput.value = chip.dataset.prompt;
+      handleSend();
+    });
+  });
   chatContainer.appendChild(node);
 }
 function removeEmptyState() {
@@ -262,6 +273,7 @@ function renderMovieCards(movies) {
     const poster = filme.poster
       ? `<img class="film-poster" src="${filme.poster}" alt="${escapeHtml(filme.title)}" loading="lazy" />`
       : `<div class="film-poster-fallback">🎬</div>`;
+    const filmIdx = movies.indexOf(filme);
     const liked    = memory.likedMovies.some(m => m.id === filme.id);
     const disliked = memory.dislikedMovies.some(m => m.id === filme.id);
 
@@ -271,7 +283,7 @@ function renderMovieCards(movies) {
       ${poster}
       <div class="film-info">
         <div class="film-title">${escapeHtml(filme.title)}</div>
-        <div class="film-meta">${filme.year || '—'}<span class="film-rating">⭐ ${nota}</span></div>
+        <div class="film-meta">${filme.year || '—'}<span class="film-rating">★ ${nota}</span></div>
         <div class="film-desc">${escapeHtml(filme.overview || 'Sinopse não disponível em português.')}</div>
         <div class="film-feedback">
           <button class="feedback-btn like-btn ${liked ? 'active' : ''}" data-action="like">👍 Gostei</button>
@@ -399,12 +411,14 @@ function hideAuthAlert() { authAlert.style.display = 'none'; }
 function renderAuthPanel() {
   hideAuthAlert();
   if (currentUser) {
+    authPanel.classList.add('is-logged-in');
     authTabs.style.display = 'none';
     loginForm.style.display = 'none';
     registerForm.style.display = 'none';
     profileView.style.display = 'block';
     renderProfileView(currentUser, currentPerfil, memory);
   } else {
+    authPanel.classList.remove('is-logged-in');
     authTabs.style.display = 'flex';
     profileView.style.display = 'none';
     const activeTab = authTabs.querySelector('.auth-tab.active')?.dataset.tab || 'login';
@@ -474,10 +488,10 @@ function renderProfileView(user, perfil, mem) {
     }, 120);
   }
 
-  // Stats
-  document.getElementById('statLiked').textContent = (mem.likedMovies || []).length;
-  document.getElementById('statDisliked').textContent = (mem.dislikedMovies || []).length;
-  document.getElementById('statSessions').textContent = mem.sessions || 0;
+  // Stats com count-up
+  countUp(document.getElementById('statLiked'),    (mem.likedMovies || []).length);
+  countUp(document.getElementById('statDisliked'), (mem.dislikedMovies || []).length);
+  countUp(document.getElementById('statSessions'), mem.sessions || 0);
 
   const topGenres = getTopPreference('genres', 3);
   document.getElementById('genreChipsProfile').innerHTML =
@@ -505,6 +519,35 @@ function renderProfileView(user, perfil, mem) {
   }
 
   setupInlineEdit();
+  setTimeout(setupProfileScrollReveal, 100);
+}
+
+function countUp(el, target) {
+  if (!el || target === 0) { if (el) el.textContent = 0; return; }
+  const duration = 800;
+  const start = Date.now();
+  const tick = () => {
+    const elapsed = Date.now() - start;
+    const progress = Math.min(elapsed / duration, 1);
+    const eased = 1 - Math.pow(1 - progress, 3);
+    el.textContent = Math.round(eased * target);
+    if (progress < 1) requestAnimationFrame(tick);
+  };
+  requestAnimationFrame(tick);
+}
+
+function setupProfileScrollReveal() {
+  const sections = document.querySelectorAll('.profile-section');
+  if (!sections.length) return;
+  const obs = new IntersectionObserver((entries) => {
+    entries.forEach((entry, i) => {
+      if (entry.isIntersecting) {
+        setTimeout(() => entry.target.classList.add('revealed'), i * 60);
+        obs.unobserve(entry.target);
+      }
+    });
+  }, { threshold: 0.12 });
+  sections.forEach(s => obs.observe(s));
 }
 
 function revealSemente(palavras) {
@@ -693,6 +736,40 @@ registerForm.addEventListener('submit', handleRegister);
 document.getElementById('regTelefone').addEventListener('input', e => maskBRPhone(e.target));
 logoutBtn.addEventListener('click', handleLogout);
 goQuizBtn.addEventListener('click', () => showChat());
+document.getElementById('authCloseBtn')?.addEventListener('click', () => { if (currentUser) showChat(); });
+
+/* ── Char counter ── */
+const charCountEl = document.getElementById('inputCharCount');
+chatInput.addEventListener('input', () => {
+  const len = chatInput.value.length;
+  const max = parseInt(chatInput.maxLength, 10) || 280;
+  if (!charCountEl) return;
+  if (len === 0) {
+    charCountEl.classList.remove('visible', 'warn', 'limit');
+    return;
+  }
+  charCountEl.textContent = `${len}/${max}`;
+  charCountEl.classList.add('visible');
+  charCountEl.classList.toggle('warn',  len > max * 0.85);
+  charCountEl.classList.toggle('limit', len > max * 0.96);
+});
+
+/* ── Header scroll blur ── */
+const siteHeader = document.querySelector('.site-header');
+chatContainer.addEventListener('scroll', () => {
+  siteHeader?.classList.toggle('scrolled', chatContainer.scrollTop > 8);
+}, { passive: true });
+
+/* ── Micro-shake no envio ── */
+const origHandleSend = handleSend;
+// patch send to shake input on empty
+sendBtn.addEventListener('click', () => {
+  if (!chatInput.value.trim()) {
+    const wrapper = chatInput.closest('.input-wrapper');
+    wrapper?.classList.add('shake');
+    wrapper?.addEventListener('animationend', () => wrapper.classList.remove('shake'), { once: true });
+  }
+}, true);
 
 /* ============================================================
    FUNDO DE PARTÍCULAS
@@ -709,31 +786,42 @@ function initParticleBackground() {
     h = canvas.height = innerHeight * DPR;
     canvas.style.width = innerWidth + 'px';
     canvas.style.height = innerHeight + 'px';
-    const n = Math.min(70, Math.floor(innerWidth / 22));
+    const n = Math.min(55, Math.floor(innerWidth / 28));
     points = Array.from({ length: n }, () => ({
       x: Math.random() * w, y: Math.random() * h,
-      vx: (Math.random() - 0.5) * 0.25 * DPR, vy: (Math.random() - 0.5) * 0.25 * DPR,
-      r: (Math.random() * 1.4 + 0.4) * DPR,
+      vx: (Math.random() - 0.5) * 0.3 * DPR,
+      vy: (Math.random() - 0.5) * 0.3 * DPR,
+      r: (Math.random() * 1.2 + 0.5) * DPR,
     }));
   }
 
   function tick() {
     ctx.clearRect(0, 0, w, h);
+
     for (const p of points) {
       p.x += p.vx; p.y += p.vy;
       if (p.x < 0 || p.x > w) p.vx *= -1;
       if (p.y < 0 || p.y > h) p.vy *= -1;
-      ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
-      ctx.fillStyle = 'rgba(122, 243, 255, 0.5)'; ctx.fill();
+
+      // Traço de filme: linha curta na direção do movimento
+      const tailLen = 8 * DPR;
+      ctx.beginPath();
+      ctx.moveTo(p.x - p.vx * tailLen, p.y - p.vy * tailLen);
+      ctx.lineTo(p.x, p.y);
+      ctx.strokeStyle = 'rgba(45, 228, 255, 0.55)';
+      ctx.lineWidth = p.r;
+      ctx.lineCap = 'round';
+      ctx.stroke();
     }
-    const max = 130 * DPR;
+
+    const max = 120 * DPR;
     for (let i = 0; i < points.length; i++) {
       for (let j = i + 1; j < points.length; j++) {
         const a = points[i], b = points[j];
         const d = Math.hypot(a.x - b.x, a.y - b.y);
         if (d < max) {
-          ctx.globalAlpha = (1 - d / max) * 0.18;
-          ctx.strokeStyle = '#38e8ff'; ctx.lineWidth = DPR * 0.6;
+          ctx.globalAlpha = (1 - d / max) * 0.14;
+          ctx.strokeStyle = '#2de4ff'; ctx.lineWidth = DPR * 0.5;
           ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
           ctx.globalAlpha = 1;
         }
