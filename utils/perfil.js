@@ -50,13 +50,60 @@ const SEMENTE_POOL = {
 };
 
 const CONQUISTAS_DEF = [
-  { id: 'primeiro_quiz',   nome: 'Primeira Sessão',    simbolo: '◈', descricao: 'Completou o primeiro quiz' },
-  { id: 'cinco_filmes',    nome: 'Cinéfilo Iniciante', simbolo: '▲', descricao: 'Curtiu 5 filmes' },
-  { id: 'semana_cineasta', nome: 'Semana do Cineasta', simbolo: '⬡', descricao: 'Completou 7 sessões de quiz' },
-  { id: 'oraculo_badge',   nome: 'Visão do Oráculo',   simbolo: '⬡', descricao: 'Completou 10 sessões de quiz' },
-  { id: 'coleccionador',   nome: 'Colecionador',       simbolo: '◉', descricao: 'Curtiu 25 filmes' },
-  { id: 'critico_feroz',   nome: 'Crítico Feroz',      simbolo: '◆', descricao: 'Não curtiu 10 filmes' },
+  { id: 'primeiro_quiz',    nome: 'Primeira Sessão',    simbolo: '◈', descricao: 'Completou o primeiro quiz' },
+  { id: 'cinco_filmes',     nome: 'Cinéfilo Iniciante', simbolo: '▲', descricao: 'Curtiu 5 filmes' },
+  { id: 'semana_cineasta',  nome: 'Semana do Cineasta', simbolo: '⬡', descricao: 'Completou 7 sessões de quiz' },
+  { id: 'oraculo_badge',    nome: 'Visão do Oráculo',   simbolo: '⬡', descricao: 'Completou 10 sessões de quiz' },
+  { id: 'coleccionador',    nome: 'Colecionador',       simbolo: '◉', descricao: 'Curtiu 25 filmes' },
+  { id: 'critico_feroz',    nome: 'Crítico Feroz',      simbolo: '◆', descricao: 'Não curtiu 10 filmes' },
+  { id: 'primeiro_visto',   nome: 'Luzes Apagadas',     simbolo: '✓', descricao: 'Marcou o primeiro filme como assistido' },
+  { id: 'maratonista',      nome: 'Maratonista',        simbolo: '▶', descricao: 'Assistiu 20 filmes' },
+  { id: 'mestre_do_cinema', nome: 'Mestre do Cinema',   simbolo: '✦', descricao: 'Alcançou o nível Mestre de conhecimento' },
 ];
+
+/* ── Nota de conhecimento cinematográfico ───────────────────── */
+const NIVEIS_CONHECIMENTO = [
+  { id: 'iniciante',  nome: 'Iniciante',  min: 0 },
+  { id: 'espectador', nome: 'Espectador', min: 50 },
+  { id: 'cinefilo',   nome: 'Cinéfilo',   min: 150 },
+  { id: 'critico',    nome: 'Crítico',    min: 300 },
+  { id: 'curador',    nome: 'Curador',    min: 600 },
+  { id: 'mestre',     nome: 'Mestre',     min: 1000 },
+];
+
+/**
+ * Score derivado exclusivamente de dados do servidor (tabela user_movies
+ * + sessions da memória) — nunca é persistido nem aceito do cliente.
+ * Cada filme visto vale 10 pontos; ver E avaliar vale bônus; amplitude
+ * de gêneros e engajamento em conversas completam a nota.
+ */
+function computeConhecimento(stats = {}) {
+  const watched = stats.watched || 0;
+  const watchedRated = stats.watchedRated || 0;
+  const distinctGenres = stats.distinctGenres || 0;
+  const sessions = stats.sessions || 0;
+
+  const pontos = watched * 10
+    + watchedRated * 2
+    + Math.min(distinctGenres, 15) * 5
+    + Math.min(sessions, 30) * 3;
+
+  let nivel = NIVEIS_CONHECIMENTO[0];
+  for (const n of NIVEIS_CONHECIMENTO) if (pontos >= n.min) nivel = n;
+
+  const idx = NIVEIS_CONHECIMENTO.indexOf(nivel);
+  const proximo = NIVEIS_CONHECIMENTO[idx + 1] || null;
+  const progresso = proximo
+    ? Math.min(1, (pontos - nivel.min) / (proximo.min - nivel.min))
+    : 1;
+
+  return {
+    pontos,
+    nivel: { id: nivel.id, nome: nivel.nome },
+    proximoNivel: proximo ? { id: proximo.id, nome: proximo.nome, min: proximo.min } : null,
+    progresso: Math.round(progresso * 100) / 100,
+  };
+}
 
 function seededHash(str) {
   let hash = 0;
@@ -149,15 +196,29 @@ function updateTracosFromSession(perfilData, sessionState) {
   return { ...perfilData, tracos: t };
 }
 
-function checkAndUnlockConquistas(perfilData, memoryData) {
+/**
+ * Avalia conquistas a partir de stats calculadas no servidor
+ * (getUserMovieStats + sessions da memória) — nunca do payload do cliente.
+ * Contas antigas ganham as definições novas que ainda não têm no array.
+ */
+function checkAndUnlockConquistas(perfilData, stats = {}) {
   if (!perfilData.conquistas) return perfilData;
 
-  const liked = (memoryData.likedMovies || []).length;
-  const disliked = (memoryData.dislikedMovies || []).length;
-  const sessions = memoryData.sessions || 0;
+  const liked = stats.liked || 0;
+  const disliked = stats.disliked || 0;
+  const watched = stats.watched || 0;
+  const sessions = stats.sessions || 0;
+  const nivel = computeConhecimento(stats).nivel.id;
   const now = new Date().toISOString();
 
-  const conquistas = perfilData.conquistas.map(c => {
+  const existentes = new Set(perfilData.conquistas.map(c => c.id));
+  const todas = [
+    ...perfilData.conquistas,
+    ...CONQUISTAS_DEF.filter(d => !existentes.has(d.id))
+      .map(d => ({ id: d.id, desbloqueada: false, desbloqueada_em: null })),
+  ];
+
+  const conquistas = todas.map(c => {
     if (c.desbloqueada) return c;
     let unlock = false;
     if (c.id === 'primeiro_quiz' && sessions >= 1) unlock = true;
@@ -166,6 +227,9 @@ function checkAndUnlockConquistas(perfilData, memoryData) {
     if (c.id === 'oraculo_badge' && sessions >= 10) unlock = true;
     if (c.id === 'coleccionador' && liked >= 25) unlock = true;
     if (c.id === 'critico_feroz' && disliked >= 10) unlock = true;
+    if (c.id === 'primeiro_visto' && watched >= 1) unlock = true;
+    if (c.id === 'maratonista' && watched >= 20) unlock = true;
+    if (c.id === 'mestre_do_cinema' && nivel === 'mestre') unlock = true;
     return unlock ? { ...c, desbloqueada: true, desbloqueada_em: now } : c;
   });
 
@@ -175,6 +239,8 @@ function checkAndUnlockConquistas(perfilData, memoryData) {
 module.exports = {
   ARCHETYPES,
   CONQUISTAS_DEF,
+  NIVEIS_CONHECIMENTO,
+  computeConhecimento,
   buildDefaultPerfil,
   generateSemente,
   generateArquetipo,

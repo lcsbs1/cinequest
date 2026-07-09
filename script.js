@@ -9,12 +9,15 @@ const API_BASE       = ''; // mesmo servidor (Express)
 
 /* ── Metadados do Perfil Cinematográfico ───────────────────── */
 const CONQUISTAS_META = {
-  primeiro_quiz:   { nome: 'Primeira Sessão',     simbolo: '◈' },
-  cinco_filmes:    { nome: 'Cinéfilo Iniciante',  simbolo: '▲' },
-  semana_cineasta: { nome: 'Semana do Cineasta',  simbolo: '⬡' },
-  oraculo_badge:   { nome: 'Visão do Oráculo',    simbolo: '⬡' },
-  coleccionador:   { nome: 'Colecionador',        simbolo: '◉' },
-  critico_feroz:   { nome: 'Crítico Feroz',       simbolo: '◆' },
+  primeiro_quiz:    { nome: 'Primeira Sessão',     simbolo: '◈' },
+  cinco_filmes:     { nome: 'Cinéfilo Iniciante',  simbolo: '▲' },
+  semana_cineasta:  { nome: 'Semana do Cineasta',  simbolo: '⬡' },
+  oraculo_badge:    { nome: 'Visão do Oráculo',    simbolo: '⬡' },
+  coleccionador:    { nome: 'Colecionador',        simbolo: '◉' },
+  critico_feroz:    { nome: 'Crítico Feroz',       simbolo: '◆' },
+  primeiro_visto:   { nome: 'Luzes Apagadas',      simbolo: '✓' },
+  maratonista:      { nome: 'Maratonista',         simbolo: '▶' },
+  mestre_do_cinema: { nome: 'Mestre do Cinema',    simbolo: '✦' },
 };
 
 const TRACO_LABELS = {
@@ -31,6 +34,11 @@ let memory          = loadMemory();
 let currentUser     = null;
 let currentPerfil   = null;
 let memorySyncTimer = null;
+
+// Estado dos filmes (visto/reação) — fonte de verdade é o servidor (tabela user_movies)
+const movieState        = new Map();
+let currentStats        = null;
+let currentConhecimento = null;
 
 /* ── Referências DOM ───────────────────────────────────────── */
 const appWrapper    = document.querySelector('.app-wrapper');
@@ -57,7 +65,7 @@ const sleep        = ms => new Promise(r => setTimeout(r, ms));
 const scrollBottom = () => chatContainer.scrollTo({ top: chatContainer.scrollHeight, behavior: 'smooth' });
 
 function escapeHtml(s = '') {
-  return s.replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+  return s.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
 function formatAIText(s = '') {
   return escapeHtml(s)
@@ -93,8 +101,6 @@ function defaultMemory() {
     userName: '',
     sessions: 0,
     preferences: { moods: {}, genres: {}, durations: {}, eras: {}, companies: {}, openness: {} },
-    likedMovies: [],
-    dislikedMovies: [],
     lastQuiz: null,
     geminiData: { interactions: [], ideas: [], lastResponse: '', usage: { queries: 0 } },
   };
@@ -103,7 +109,11 @@ function defaultMemory() {
 function loadMemory() {
   try {
     const raw = localStorage.getItem(MEMORY_KEY);
-    return raw ? { ...defaultMemory(), ...JSON.parse(raw) } : defaultMemory();
+    const mem = raw ? { ...defaultMemory(), ...JSON.parse(raw) } : defaultMemory();
+    // Filmes agora vivem no servidor (user_movies) — limpa resquícios locais
+    delete mem.likedMovies;
+    delete mem.dislikedMovies;
+    return mem;
   } catch {
     return defaultMemory();
   }
@@ -130,13 +140,6 @@ function mergeMemory(serverMemory) {
     merged.preferences[key] = bucket;
   });
 
-  const mergeMovies = (a = [], b = []) => {
-    const map = new Map();
-    [...a, ...b].forEach(m => map.set(m.id, m));
-    return [...map.values()].sort((x, y) => (y.ts || 0) - (x.ts || 0)).slice(0, 30);
-  };
-  merged.likedMovies    = mergeMovies(serverMemory.likedMovies, local.likedMovies);
-  merged.dislikedMovies = mergeMovies(serverMemory.dislikedMovies, local.dislikedMovies);
   merged.lastQuiz = serverMemory.lastQuiz || local.lastQuiz;
 
   merged.geminiData = {
@@ -165,13 +168,48 @@ async function syncMemoryToServer() {
   }
 }
 
-function recordMovieFeedback(filme, liked) {
-  const entry = { id: filme.id, title: filme.title, ts: Date.now() };
-  const list  = liked ? memory.likedMovies : memory.dislikedMovies;
-  const other = liked ? memory.dislikedMovies : memory.likedMovies;
-  memory[liked ? 'likedMovies' : 'dislikedMovies'] = [entry, ...list.filter(m => m.id !== filme.id)].slice(0, 30);
-  memory[liked ? 'dislikedMovies' : 'likedMovies'] = other.filter(m => m.id !== filme.id);
-  saveMemory();
+/* ── Feedback de filmes — persistido no servidor (user_movies) ── */
+async function hydrateMovieState() {
+  if (!getAuthToken()) return;
+  try {
+    const data = await apiFetch('/api/user/movies');
+    movieState.clear();
+    (data.movies || []).forEach(m => movieState.set(m.movieId, { reaction: m.reaction, watched: m.watched }));
+    if (data.stats) currentStats = { ...(currentStats || {}), ...data.stats };
+  } catch (err) {
+    console.warn('Falha ao carregar filmes do servidor:', err.message);
+  }
+}
+
+// UI otimista: aplica o estado local imediatamente e faz rollback se a API falhar
+async function sendMovieAction(filme, action) {
+  const prev = { ...(movieState.get(filme.id) || { reaction: null, watched: false }) };
+  const next = { ...prev };
+  if (action === 'liked' || action === 'disliked') next.reaction = action;
+  if (action === 'clear_reaction') next.reaction = null;
+  if (action === 'watched') next.watched = true;
+  if (action === 'unwatched') next.watched = false;
+  movieState.set(filme.id, next);
+
+  try {
+    const data = await apiFetch('/api/user/movies', {
+      method: 'POST',
+      body: JSON.stringify({
+        movieId: filme.id,
+        title: filme.title,
+        posterPath: filme.poster || null,
+        genreIds: filme.genreIds || [],
+        action,
+      }),
+    });
+    if (data.movie) movieState.set(filme.id, { reaction: data.movie.reaction, watched: data.movie.watched });
+    if (data.perfil) currentPerfil = data.perfil;
+    if (data.stats) currentStats = data.stats;
+    if (data.conhecimento) currentConhecimento = data.conhecimento;
+  } catch (err) {
+    movieState.set(filme.id, prev);
+    console.warn('Falha ao registrar feedback:', err.message);
+  }
 }
 
 function getTopPreference(key, n = 3) {
@@ -273,9 +311,10 @@ function renderMovieCards(movies) {
     const poster = filme.poster
       ? `<img class="film-poster" src="${filme.poster}" alt="${escapeHtml(filme.title)}" loading="lazy" />`
       : `<div class="film-poster-fallback">🎬</div>`;
-    const filmIdx = movies.indexOf(filme);
-    const liked    = memory.likedMovies.some(m => m.id === filme.id);
-    const disliked = memory.dislikedMovies.some(m => m.id === filme.id);
+    const state    = movieState.get(filme.id) || {};
+    const liked    = state.reaction === 'liked';
+    const disliked = state.reaction === 'disliked';
+    const watched  = !!state.watched;
 
     const card = document.createElement('div');
     card.className = 'film-card';
@@ -286,17 +325,31 @@ function renderMovieCards(movies) {
         <div class="film-meta">${filme.year || '—'}<span class="film-rating">★ ${nota}</span></div>
         <div class="film-desc">${escapeHtml(filme.overview || 'Sinopse não disponível em português.')}</div>
         <div class="film-feedback">
+          <button class="feedback-btn watched-btn ${watched ? 'active' : ''}" data-action="watched">✓ Já assisti</button>
           <button class="feedback-btn like-btn ${liked ? 'active' : ''}" data-action="like">👍 Gostei</button>
           <button class="feedback-btn dislike-btn ${disliked ? 'active' : ''}" data-action="dislike">👎 Não curti</button>
         </div>
       </div>`;
 
+    const syncCard = () => {
+      const st = movieState.get(filme.id) || {};
+      card.querySelector('.watched-btn').classList.toggle('active', !!st.watched);
+      card.querySelector('.like-btn').classList.toggle('active', st.reaction === 'liked');
+      card.querySelector('.dislike-btn').classList.toggle('active', st.reaction === 'disliked');
+    };
+
     card.querySelectorAll('.feedback-btn').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const likedAction = btn.dataset.action === 'like';
-        recordMovieFeedback(filme, likedAction);
-        card.querySelector('.like-btn').classList.toggle('active', likedAction);
-        card.querySelector('.dislike-btn').classList.toggle('active', !likedAction);
+      btn.addEventListener('click', async () => {
+        const st = movieState.get(filme.id) || {};
+        let action;
+        if (btn.dataset.action === 'watched')   action = st.watched ? 'unwatched' : 'watched';
+        else if (btn.dataset.action === 'like') action = st.reaction === 'liked' ? 'clear_reaction' : 'liked';
+        else                                    action = st.reaction === 'disliked' ? 'clear_reaction' : 'disliked';
+
+        const request = sendMovieAction(filme, action);
+        syncCard();        // estado otimista já aplicado
+        await request;
+        syncCard();        // confirma (ou desfaz, em caso de erro)
       });
     });
 
@@ -324,8 +377,8 @@ function startChat() {
       else addBotMessage(formatAIText(t.text));
     });
   } else {
+    // Sem chamada à IA no carregamento: o empty state já convida à conversa
     renderEmptyState();
-    sendToGemini('', { bootstrap: true });
   }
 }
 
@@ -386,9 +439,20 @@ function showChat() {
   startChat();
 }
 
-function showAccount() {
+async function showAccount() {
   appWrapper.classList.add('account-mode');
   authPanel.style.display = 'block';
+  if (currentUser) {
+    // Perfil, stats e nota de conhecimento sempre frescos do servidor
+    try {
+      const data = await apiFetch('/api/user/perfil');
+      if (data.perfil) currentPerfil = data.perfil;
+      if (data.stats) currentStats = data.stats;
+      if (data.conhecimento) currentConhecimento = data.conhecimento;
+    } catch (err) {
+      console.warn('Falha ao atualizar perfil:', err.message);
+    }
+  }
   renderAuthPanel();
 }
 
@@ -488,10 +552,15 @@ function renderProfileView(user, perfil, mem) {
     }, 120);
   }
 
-  // Stats com count-up
-  countUp(document.getElementById('statLiked'),    (mem.likedMovies || []).length);
-  countUp(document.getElementById('statDisliked'), (mem.dislikedMovies || []).length);
-  countUp(document.getElementById('statSessions'), mem.sessions || 0);
+  // Stats com count-up — vindas do servidor (tabela user_movies)
+  const stats = currentStats || {};
+  countUp(document.getElementById('statWatched'),  stats.watched ?? 0);
+  countUp(document.getElementById('statLiked'),    stats.liked ?? 0);
+  countUp(document.getElementById('statDisliked'), stats.disliked ?? 0);
+  countUp(document.getElementById('statSessions'), stats.sessions ?? mem.sessions ?? 0);
+
+  // Nota de conhecimento cinematográfico
+  renderConhecimento(currentConhecimento);
 
   const topGenres = getTopPreference('genres', 3);
   document.getElementById('genreChipsProfile').innerHTML =
@@ -520,6 +589,26 @@ function renderProfileView(user, perfil, mem) {
 
   setupInlineEdit();
   setTimeout(setupProfileScrollReveal, 100);
+}
+
+function renderConhecimento(c) {
+  const nivelEl  = document.getElementById('conhecimentoNivel');
+  const pontosEl = document.getElementById('conhecimentoPontos');
+  const barEl    = document.getElementById('conhecimentoBar');
+  const nextEl   = document.getElementById('conhecimentoNext');
+  if (!nivelEl || !pontosEl || !barEl || !nextEl) return;
+
+  const conhecimento = c || { pontos: 0, nivel: { nome: 'Iniciante' }, proximoNivel: null, progresso: 0 };
+  nivelEl.textContent  = conhecimento.nivel?.nome || 'Iniciante';
+  pontosEl.textContent = `${conhecimento.pontos || 0} pts`;
+  nextEl.textContent   = conhecimento.proximoNivel
+    ? `Próximo nível: ${conhecimento.proximoNivel.nome} (${conhecimento.proximoNivel.min} pts)`
+    : 'Nível máximo alcançado ✦';
+
+  barEl.style.width = '0';
+  setTimeout(() => {
+    barEl.style.width = `${Math.round((conhecimento.progresso || 0) * 100)}%`;
+  }, 150);
 }
 
 function countUp(el, target) {
@@ -649,6 +738,7 @@ async function handleLogin(e) {
     if (data.user.memory) mergeMemory(data.user.memory);
     memory.userName = currentUser.nome;
     saveMemory();
+    await hydrateMovieState();
     updateAuthUI();
     loginForm.reset();
     chatContainer.innerHTML = '';
@@ -683,6 +773,9 @@ async function handleRegister(e) {
     mergeMemory(data.user.memory || {});
     memory.userName = currentUser.nome;
     saveMemory();
+    movieState.clear();
+    currentStats = null;
+    currentConhecimento = null;
     updateAuthUI();
     registerForm.reset();
     chatContainer.innerHTML = '';
@@ -698,6 +791,9 @@ function handleLogout() {
   setAuthToken(null);
   currentUser = null;
   currentPerfil = null;
+  currentStats = null;
+  currentConhecimento = null;
+  movieState.clear();
   chatContainer.innerHTML = '';
   updateAuthUI();
   showAccount();
@@ -711,9 +807,12 @@ async function checkSession() {
     const data = await apiFetch('/api/auth/me');
     currentUser = data.user;
     currentPerfil = data.user.perfil || null;
+    currentStats = data.stats || null;
+    currentConhecimento = data.conhecimento || null;
     if (data.user.memory) mergeMemory(data.user.memory);
     memory.userName = currentUser.nome;
     try { localStorage.setItem(MEMORY_KEY, JSON.stringify(memory)); } catch {}
+    await hydrateMovieState();
     updateAuthUI();
   } catch {
     setAuthToken(null);
@@ -795,6 +894,8 @@ function initParticleBackground() {
     }));
   }
 
+  let rafId = null;
+
   function tick() {
     ctx.clearRect(0, 0, w, h);
 
@@ -827,12 +928,22 @@ function initParticleBackground() {
         }
       }
     }
-    requestAnimationFrame(tick);
+    rafId = requestAnimationFrame(tick);
   }
+
+  // Pausa a animação quando a aba não está visível (economia de CPU/bateria)
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) {
+      cancelAnimationFrame(rafId);
+      rafId = null;
+    } else if (rafId === null) {
+      rafId = requestAnimationFrame(tick);
+    }
+  });
 
   addEventListener('resize', resize);
   resize();
-  tick();
+  rafId = requestAnimationFrame(tick);
 }
 
 /* ============================================================

@@ -1,6 +1,10 @@
 const jwt = require('jsonwebtoken');
 
-const JWT_SECRET = process.env.JWT_SECRET || 'cinequest_dev_secret_change_me';
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET) {
+  console.error('❌ JWT_SECRET ausente. Defina no .env antes de iniciar o servidor.');
+  process.exit(1);
+}
 const TOKEN_EXPIRY = '7d';
 
 function signToken(userId) {

@@ -542,7 +542,7 @@ body {
   border-radius: var(--radius-pill); padding: 2px 10px;
 }
 
-.film-feedback { display: flex; gap: 8px; margin-top: auto; }
+.film-feedback { display: flex; flex-wrap: wrap; gap: 8px; margin-top: auto; }
 .feedback-btn {
   font-family: var(--font-mono); font-size: 11px; color: var(--text-low);
   background: rgba(255, 255, 255, 0.03); border: 1px solid var(--hair);
@@ -552,6 +552,7 @@ body {
 .feedback-btn:hover { border-color: var(--hair-bright); color: var(--text-mid); }
 .feedback-btn.active.like-btn    { color: var(--green); border-color: rgba(74, 222, 128, 0.45); background: rgba(74, 222, 128, 0.08); }
 .feedback-btn.active.dislike-btn { color: var(--danger); border-color: rgba(248, 113, 160, 0.45); background: rgba(248, 113, 160, 0.08); }
+.feedback-btn.active.watched-btn { color: var(--cyan); border-color: rgba(45, 228, 255, 0.45); background: rgba(45, 228, 255, 0.08); }
 
 /* ── Loading (skeleton) ── */
 .loading-card {
@@ -933,8 +934,36 @@ body {
 }
 .traco-value { font-family: var(--font-mono); font-size: 10px; color: var(--text-low); width: 26px; text-align: right; }
 
+/* Conhecimento de Cinema */
+.conhecimento-card {
+  background: var(--bg-surface); border: 1px solid var(--hair);
+  border-radius: var(--radius-md); padding: 16px 18px;
+}
+.conhecimento-header {
+  display: flex; justify-content: space-between; align-items: baseline;
+  margin-bottom: 10px;
+}
+.conhecimento-nivel {
+  font-family: var(--font-mono); font-size: 14px; font-weight: 700;
+  color: var(--gold); text-shadow: 0 0 12px rgba(245, 200, 66, 0.35);
+  letter-spacing: 0.08em; text-transform: uppercase;
+}
+.conhecimento-pontos { font-family: var(--font-mono); font-size: 11px; color: var(--text-low); }
+.conhecimento-bar-track {
+  height: 4px; background: rgba(255, 255, 255, 0.06);
+  border-radius: 4px; overflow: hidden;
+}
+.conhecimento-bar-fill {
+  height: 100%; border-radius: 4px;
+  background: linear-gradient(90deg, var(--gold), var(--cyan));
+  box-shadow: 0 0 8px rgba(245, 200, 66, 0.3);
+  width: 0;
+  transition: width 1.2s cubic-bezier(0.16, 0.84, 0.44, 1);
+}
+.conhecimento-next { font-family: var(--font-mono); font-size: 10px; color: var(--text-low); margin-top: 8px; }
+
 /* Stats */
-.stats-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-bottom: 10px; }
+.stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 10px; }
 .stat-card {
   background: var(--bg-surface); border: 1px solid var(--hair);
   border-radius: var(--radius-md); padding: 16px 10px; text-align: center;

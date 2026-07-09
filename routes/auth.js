@@ -49,20 +49,13 @@ function validateRegister(body) {
 }
 
 router.post('/register', async (req, res) => {
-  try {
-    const errors = validateRegister(req.body);
-    if (errors.length) return res.status(400).json({ error: errors[0], errors });
-
-    const { nome, email, telefone, data_nascimento, senha } = req.body;
-
-    if (await findUserByEmail(email)) {
-      return res.status(409).json({ error: 'Este e-mail já está cadastrado.' });
-    }
-
+  if (await findUserByEmail(email)) { // Adicionado await
+  return res.status(409).json({ error: 'Este e-mail já está cadastrado.' });
+}
     const senha_hash = await bcrypt.hash(senha, 10);
     const now = Date.now();
     const perfilData = buildDefaultPerfil(email.toLowerCase().trim(), now);
-    const user = await createUser({ nome, email, telefone, data_nascimento, senha_hash, perfil_data: perfilData });
+    const user = await createUser({ nome, email, telefone, data_nascimento, senha_hash, perfil_data: perfilData }); // Adicionado await
     const token = signToken(user.id);
 
     res.status(201).json({
@@ -70,11 +63,11 @@ router.post('/register', async (req, res) => {
       token,
       user: toPublicUser(user),
     });
-  } catch (err) {
+    catch (err) {
     console.error('Register error:', err);
     res.status(500).json({ error: 'Erro interno ao criar conta.' });
   }
-});
+;
 
 router.post('/login', async (req, res) => {
   try {

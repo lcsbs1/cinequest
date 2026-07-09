@@ -4,19 +4,22 @@ const {
   updateUserMemory,
   getPerfil,
   updatePerfil,
+  getUserMovieStats,
+  parseJsonb,
 } = require('../database');
 const { authMiddleware } = require('../middleware/auth');
 const { updateTracosFromSession, checkAndUnlockConquistas } = require('../utils/perfil');
+const { defaultMemory } = require('../utils/memory');
 const { discoverMovies } = require('../utils/tmdb');
 
 const router = express.Router();
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
+const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-flash-latest';
 const GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta';
 
 function geminiUrl() {
-  return `${GEMINI_BASE}/models/${GEMINI_MODEL}:generateContent?key=${encodeURIComponent(GEMINI_API_KEY)}`;
+  return `${GEMINI_BASE}/models/${GEMINI_MODEL}:generateContent`;
 }
 
 /* ── Ferramenta exposta ao modelo ───────────────────────────── */
@@ -62,28 +65,19 @@ const SYSTEM_BASE =
   'Seja conciso; evite respostas longas demais.';
 
 /* ── Memória completa do usuário ────────────────────────────── */
-function defaultMemory() {
-  return {
-    userName: '',
-    sessions: 0,
-    preferences: { moods: {}, genres: {}, durations: {}, eras: {}, companies: {}, openness: {} },
-    likedMovies: [],
-    dislikedMovies: [],
-    lastQuiz: null,
-    geminiData: { interactions: [], ideas: [], lastResponse: '', usage: { queries: 0 } },
-  };
-}
-
 function loadFullMemory(user) {
-  let mem = {};
-  try { mem = JSON.parse(user.memory_data || '{}'); } catch {}
+  const mem = parseJsonb(user.memory_data);
   const base = defaultMemory();
-  return {
+  const full = {
     ...base,
     ...mem,
     preferences: { ...base.preferences, ...(mem.preferences || {}) },
     geminiData: { ...base.geminiData, ...(mem.geminiData || {}) },
   };
+  // Filmes agora vivem na tabela user_movies — nunca mais no JSONB
+  delete full.likedMovies;
+  delete full.dislikedMovies;
+  return full;
 }
 
 /* ── Contexto do perfil para o systemInstruction ────────────── */
@@ -123,7 +117,10 @@ async function callGemini(contents, systemText) {
 
   const res = await fetch(geminiUrl(), {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      'x-goog-api-key': GEMINI_API_KEY,
+    },
     body: JSON.stringify(body),
   });
   const data = await res.json();
@@ -171,7 +168,8 @@ async function applyRecommendationToProfile(userId, memory, perfil, args) {
       perfil = updateTracosFromSession(perfil, sessionState);
     }
     if (perfil && perfil.conquistas) {
-      perfil = checkAndUnlockConquistas(perfil, memory);
+      const stats = await getUserMovieStats(userId);
+      perfil = checkAndUnlockConquistas(perfil, { ...stats, sessions: memory.sessions || 0 });
     }
     if (perfil && Object.keys(perfil).length) {
       await updatePerfil(userId, perfil);
@@ -220,10 +218,12 @@ router.post('/chat', authMiddleware, async (req, res) => {
       // Acopla perfil/memória a partir das pistas reunidas
       perfil = await applyRecommendationToProfile(req.userId, memory, perfil, args);
 
-      // Segundo turno: devolve os filmes ao modelo p/ comentar
+      // Segundo turno: devolve os filmes ao modelo p/ comentar.
+      // Reenvia o content original do modelo (preserva thought_signature,
+      // obrigatório nos modelos Gemini 3+)
       contents = [
         ...contents,
-        { role: 'model', parts: [{ functionCall: fnCall }] },
+        content,
         {
           role: 'user',
           parts: [{
@@ -264,7 +264,7 @@ router.post('/chat', authMiddleware, async (req, res) => {
     });
   } catch (err) {
     console.error('Gemini request failed:', err.message);
-    return res.status(502).json({ error: 'Não consegui falar com a IA agora. Tente novamente em instantes.', detail: err.message });
+    return res.status(502).json({ error: 'Não consegui falar com a IA agora. Tente novamente em instantes.' });
   }
 });
 
