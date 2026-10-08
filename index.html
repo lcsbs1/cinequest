@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Teaser</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Roboto+Mono:wght@300;400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+  <div class="bg-grid"></div>
+  <div class="bg-glow bg-glow-1"></div>
+  <div class="bg-glow bg-glow-2"></div>
+  <canvas id="particles"></canvas>
+
+  <main class="app-wrapper">
+
+    <header class="site-header">
+      <div class="logo">
+        <span class="logo-icon">✦</span>
+        <span class="logo-text">Teaser</span>
+      </div>
+      <div class="header-actions">
+        <button class="user-pill" id="userPill" style="display:none;" title="Sua conta">
+          <span class="user-pill-avatar">👤</span>
+          <span class="user-pill-name" id="userPillName"></span>
+        </button>
+        <button class="restart-btn" id="restartBtn" title="Nova conversa">↺ Nova conversa</button>
+      </div>
+    </header>
+
+    <!-- Canvas de conversa (centro) -->
+    <main class="chat-container" id="chatContainer"></main>
+
+    <!-- Painel de autenticação / conta -->
+    <section class="auth-panel" id="authPanel" style="display:none;">
+      <div class="auth-panel-inner">
+        <div class="auth-header">
+          <div class="auth-header-icon">🎬</div>
+          <h2 class="auth-title">Sua conta Teaser</h2>
+          <p class="auth-subtitle">Entre para o Teaser te conhecer e lembrar de você</p>
+        </div>
+
+        <div class="auth-tabs" id="authTabs">
+          <button class="auth-tab active" data-tab="login" type="button">Entrar</button>
+          <button class="auth-tab" data-tab="register" type="button">Criar conta</button>
+        </div>
+
+        <div class="auth-alert" id="authAlert" style="display:none;"></div>
+
+        <!-- Login -->
+        <form class="auth-form" id="loginForm">
+          <div class="form-group">
+            <label for="loginEmail">E-mail</label>
+            <input type="email" id="loginEmail" name="email" placeholder="seu@email.com" required autocomplete="email" />
+          </div>
+          <div class="form-group">
+            <label for="loginSenha">Senha</label>
+            <input type="password" id="loginSenha" name="senha" placeholder="Sua senha" required autocomplete="current-password" minlength="6" />
+          </div>
+          <button type="submit" class="auth-submit-btn" id="loginSubmitBtn">Entrar na conta</button>
+        </form>
+
+        <!-- Registro -->
+        <form class="auth-form" id="registerForm" style="display:none;">
+          <div class="form-row">
+            <div class="form-group">
+              <label for="regNome">Nome completo</label>
+              <input type="text" id="regNome" name="nome" placeholder="Seu nome" required minlength="2" maxlength="80" autocomplete="name" />
+            </div>
+            <div class="form-group">
+              <label for="regNascimento">Data de nascimento</label>
+              <input type="date" id="regNascimento" name="data_nascimento" required max="2013-12-31" />
+            </div>
+          </div>
+          <div class="form-group">
+            <label for="regEmail">E-mail</label>
+            <input type="email" id="regEmail" name="email" placeholder="seu@email.com" required autocomplete="email" />
+          </div>
+          <div class="form-group">
+            <label for="regTelefone">Telefone</label>
+            <div class="phone-input-wrapper">
+              <span class="phone-prefix">+55</span>
+              <input type="tel" id="regTelefone" name="telefone" placeholder="" required autocomplete="tel" />
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label for="regSenha">Senha</label>
+              <input type="password" id="regSenha" name="senha" placeholder="Mínimo 6 caracteres" required minlength="6" autocomplete="new-password" />
+            </div>
+            <div class="form-group">
+              <label for="regConfirmar">Confirmar senha</label>
+              <input type="password" id="regConfirmar" name="confirmar_senha" placeholder="Repita a senha" required minlength="6" autocomplete="new-password" />
+            </div>
+          </div>
+          <button type="submit" class="auth-submit-btn" id="registerSubmitBtn">Criar minha conta</button>
+        </form>
+
+        <!-- Perfil logado -->
+        <div class="profile-view" id="profileView" style="display:none;">
+
+          <!-- Hero: arquétipo + nome -->
+          <div class="profile-hero">
+            <div class="profile-arquetipo-glyph" id="arquetipoGlyph">◈</div>
+            <div class="profile-hero-content">
+              <div class="profile-name" id="profileName"></div>
+              <div class="profile-arquetipo-badge">
+                <span class="arquetipo-badge-dot"></span>
+                <span id="arquetipoNome">—</span>
+              </div>
+              <div class="profile-email" id="profileEmail"></div>
+            </div>
+          </div>
+          <div class="arquetipo-descricao" id="arquetipoDesc" style="margin-bottom:14px;display:none;"></div>
+
+          <!-- DNA Cinematográfico -->
+          <div class="profile-dna-card">
+            <div class="dna-label">DNA Cinematográfico</div>
+            <div class="dna-semente">
+              <span class="semente-word" id="sWord0"></span>
+              <span class="semente-sep">·</span>
+              <span class="semente-word" id="sWord1"></span>
+              <span class="semente-sep">·</span>
+              <span class="semente-word" id="sWord2"></span>
+            </div>
+            <div class="dna-sublabel">Sua assinatura única — gerada no momento do cadastro</div>
+          </div>
+
+          <!-- Traços de Personalidade -->
+          <div class="profile-section">
+            <div class="section-label">Traços de Personalidade</div>
+            <div class="tracos-grid" id="tracosGrid"></div>
+          </div>
+
+          <!-- Estatísticas -->
+          <div class="profile-section">
+            <div class="section-label">Estatísticas</div>
+            <div class="stats-grid">
+              <div class="stat-card">
+                <div class="stat-value" id="statLiked">0</div>
+                <div class="stat-label">Curtidos</div>
+              </div>
+              <div class="stat-card">
+                <div class="stat-value" id="statDisliked">0</div>
+                <div class="stat-label">Não curtidos</div>
+              </div>
+              <div class="stat-card">
+                <div class="stat-value" id="statSessions">0</div>
+                <div class="stat-label">Conversas</div>
+              </div>
+            </div>
+            <div class="genre-chips-profile" id="genreChipsProfile"></div>
+          </div>
+
+          <!-- Conquistas -->
+          <div class="profile-section">
+            <div class="section-label">Conquistas</div>
+            <div class="conquistas-grid" id="conquistasGrid"></div>
+          </div>
+
+          <!-- Informações -->
+          <div class="profile-section">
+            <div class="section-label">Informações</div>
+            <div class="profile-info-card">
+              <div class="profile-field-editable" id="fieldNome">
+                <span class="profile-label">Nome</span>
+                <span class="profile-value" id="profileDispNome"></span>
+                <button class="edit-field-btn" data-field="nome" title="Editar">✎</button>
+              </div>
+              <div class="profile-field-editable" id="fieldTelefone">
+                <span class="profile-label">Telefone</span>
+                <span class="profile-value" id="profilePhone"></span>
+                <button class="edit-field-btn" data-field="telefone" title="Editar">✎</button>
+              </div>
+              <div class="profile-field-static">
+                <span class="profile-label">Nascimento</span>
+                <span class="profile-value" id="profileBirth"></span>
+              </div>
+              <div class="profile-field-static">
+                <span class="profile-label">Membro desde</span>
+                <span class="profile-value" id="profileSince"></span>
+              </div>
+            </div>
+            <form class="inline-edit-form" id="inlineEditForm" style="display:none;">
+              <div class="form-group">
+                <label for="editNome">Nome</label>
+                <input type="text" id="editNome" minlength="2" maxlength="80" autocomplete="name" />
+              </div>
+              <div class="form-group">
+                <label for="editTelefone">Telefone</label>
+                <input type="tel" id="editTelefone" autocomplete="tel" />
+              </div>
+              <div class="inline-edit-actions">
+                <button type="submit" class="auth-submit-btn" id="saveProfileBtn">Salvar</button>
+                <button type="button" class="auth-submit-btn secondary" id="cancelEditBtn">Cancelar</button>
+              </div>
+            </form>
+          </div>
+
+          <!-- Ações -->
+          <div class="profile-actions">
+            <button class="auth-submit-btn secondary" id="goQuizBtn" type="button">💬 Voltar à conversa</button>
+            <button class="auth-logout-btn" id="logoutBtn" type="button">Sair da conta</button>
+          </div>
+
+        </div>
+      </div>
+    </section>
+
+    <!-- Input único acoplado à IA -->
+    <footer class="input-area" id="inputArea">
+      <div class="input-wrapper">
+        <input
+          type="text"
+          id="chatInput"
+          class="chat-input"
+          placeholder="Fale com o curador… o que você quer assistir hoje?"
+          maxlength="280"
+          autocomplete="off"
+        />
+        <button class="send-btn" id="sendBtn" title="Enviar">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="22" y1="2" x2="11" y2="13"></line>
+            <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+          </svg>
+        </button>
+      </div>
+    </footer>
+
+  </main>
+
+  <script src="script.js"></script>
+</body>
+</html>
