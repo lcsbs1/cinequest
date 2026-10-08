@@ -1,4 +1,11 @@
+<<<<<<< HEAD
 node_modules/
 data/
 .env
 *.db
+=======
+node_modules/
+data/
+.env
+*.db
+>>>>>>> main
