@@ -72,7 +72,13 @@ router.post('/register', async (req, res) => {
     });
   } catch (err) {
     console.error('Register error:', err);
-    res.status(500).json({ error: 'Erro interno ao criar conta.' });
+    const isConnError = err.code === 'ECONNREFUSED' || err.message?.includes('connect') || !process.env.DATABASE_URL;
+    res.status(500).json({
+      error: isConnError
+        ? 'Erro ao conectar ao banco de dados. Verifique a variável DATABASE_URL no arquivo .env.'
+        : 'Erro interno ao criar conta.',
+      detail: process.env.NODE_ENV === 'production' ? undefined : err.message,
+    });
   }
 });
 
@@ -103,7 +109,13 @@ router.post('/login', async (req, res) => {
     });
   } catch (err) {
     console.error('Login error:', err);
-    res.status(500).json({ error: 'Erro interno ao fazer login.' });
+    const isConnError = err.code === 'ECONNREFUSED' || err.message?.includes('connect') || !process.env.DATABASE_URL;
+    res.status(500).json({
+      error: isConnError
+        ? 'Erro ao conectar ao banco de dados. Verifique a variável DATABASE_URL no arquivo .env.'
+        : 'Erro interno ao fazer login.',
+      detail: process.env.NODE_ENV === 'production' ? undefined : err.message,
+    });
   }
 });
 

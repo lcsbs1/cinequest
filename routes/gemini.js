@@ -4,6 +4,7 @@ const {
   updateUserMemory,
   getPerfil,
   updatePerfil,
+  safeJson,
 } = require('../database');
 const { authMiddleware } = require('../middleware/auth');
 const { updateTracosFromSession, checkAndUnlockConquistas } = require('../utils/perfil');
@@ -75,8 +76,7 @@ function defaultMemory() {
 }
 
 function loadFullMemory(user) {
-  let mem = {};
-  try { mem = JSON.parse(user.memory_data || '{}'); } catch {}
+  const mem = safeJson(user.memory_data);
   const base = defaultMemory();
   return {
     ...base,

@@ -7,9 +7,13 @@ const cors = require('cors');
 const authRoutes = require('./routes/auth');
 const userRoutes = require('./routes/user');
 const geminiRoutes = require('./routes/gemini');
+const { initDB } = require('./database');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+
+// Garante que as tabelas necessárias existam no banco
+initDB();
 
 app.use(cors());
 app.use(express.json({ limit: '1mb' }));

@@ -6,6 +6,7 @@ const {
   getPerfil,
   updatePerfil,
   toPublicUser,
+  safeJson,
 } = require('../database');
 const { authMiddleware } = require('../middleware/auth');
 const { updateTracosFromSession, checkAndUnlockConquistas } = require('../utils/perfil');
@@ -18,9 +19,7 @@ router.get('/memory', async (req, res) => {
   const user = await findUserById(req.userId);
   if (!user) return res.status(404).json({ error: 'Usuário não encontrado.' });
 
-  let memory = {};
-  try { memory = JSON.parse(user.memory_data || '{}'); } catch {}
-
+  const memory = safeJson(user.memory_data);
   res.json({ memory });
 });
 
